@@ -493,8 +493,8 @@
  #define PID_FUNCTIONAL_RANGE 10 // If the temperature difference between the target temperature and the actual temperature
                                   // is more than PID_FUNCTIONAL_RANGE then the PID will be shut off and the heater will be set to min/max.
  
-    #define DEFAULT_Kp  26.53
-    #define DEFAULT_Ki   2.39
+    #define DEFAULT_Kp 26.53
+    #define DEFAULT_Ki 2.39
     #define DEFAULT_Kd 73.51
 
 #endif // PIDTEMP
@@ -534,9 +534,9 @@
 
   //120V 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
   //from FOPDT model - kp=.39 Tp=405 Tdead=66, Tc set to 79.2, aggressive factor of .15 (vs .1, 1, 10)
-  #define DEFAULT_bedKp 189.35
-  #define DEFAULT_bedKi 35.23
-  #define DEFAULT_bedKd 678.50
+  #define DEFAULT_bedKp 239.38
+  #define DEFAULT_bedKi 45.99
+  #define DEFAULT_bedKd 830.72
 
   //120V 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
   //from pidautotune
