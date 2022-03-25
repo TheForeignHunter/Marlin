@@ -69,9 +69,6 @@ public:
   // Until now I did not need to actively read from the display. That's why there is no ReadVariable
   // (I extensively use the auto upload of the display)
 
-  // Read GUI and OS version from screen
-  static void ReadVersions();
-
   // Force display into another screen.
   static void SwitchScreen(DGUS_Screen screen);
   // Play sounds using the display speaker.
@@ -99,9 +96,9 @@ public:
   static size_t GetFreeTxBuffer();
   static void FlushTx();
 
-  // Checks two things: Can we confirm the presence of the display and has we initialized it.
+  // Checks two things: Can we confirm the presence of the display and has we initiliazed it.
   // (both boils down that the display answered to our chatting)
-  static bool IsInitialized() {
+  static inline bool IsInitialized() {
     return initialized;
   }
 

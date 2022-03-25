@@ -22,7 +22,7 @@
 #pragma once
 
 /**
- * Creality v4.5.3 (STM32F103RE / STM32F103RC) board pin assignments
+ * Creality v4.5.3 (STM32F103RET6) board pin assignments
  */
 
 #if HAS_MULTI_HOTEND || E_STEPPERS > 1
@@ -36,9 +36,7 @@
 #define FAN_PIN                             PB15  // FAN
 
 #if ENABLED(PROBE_ACTIVATION_SWITCH)
-  #ifndef PROBE_ACTIVATION_SWITCH_PIN
-    #define PROBE_ACTIVATION_SWITCH_PIN     PB2   // Optoswitch to Enable Z Probe
-  #endif
+  #define PROBE_ACTIVATION_SWITCH_PIN       PB2   // Optoswitch to Enable Z Probe
 #endif
 
 #include "pins_CREALITY_V45x.h"

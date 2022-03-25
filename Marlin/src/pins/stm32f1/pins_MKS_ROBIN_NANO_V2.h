@@ -39,7 +39,7 @@
 #define USES_DIAG_PINS
 
 // Avoid conflict with TIMER_SERVO when using the STM32 HAL
-#define TEMP_TIMER  5
+#define TEMP_TIMER                             5
 
 //
 // Release PB4 (Y_ENABLE_PIN) from JTAG NRST role
@@ -193,9 +193,7 @@
 //
 #if ENABLED(MKS_PWC)
   #if ENABLED(TFT_LVGL_UI)
-    #if ENABLED(PSU_CONTROL)
-      #error "PSU_CONTROL is incompatible with MKS_PWC plus TFT_LVGL_UI."
-    #endif
+    #undef PSU_CONTROL
     #undef MKS_PWC
     #define SUICIDE_PIN                     PB2
     #define SUICIDE_PIN_STATE               LOW
@@ -340,10 +338,10 @@
       #define BEEPER_PIN                    -1
     #endif
 
-  #elif ENABLED(FYSETC_MINI_12864_2_1)
-    #define LCD_PINS_DC                     PC6
+  #elif ENABLED(MKS_MINI_12864_V3)
     #define DOGLCD_CS                       PD13
-    #define DOGLCD_A0                  DOGLCD_A0
+    #define DOGLCD_A0                       PC6
+    #define LCD_PINS_DC                DOGLCD_A0
     #define LCD_BACKLIGHT_PIN               -1
     #define LCD_RESET_PIN                   PE14
     #define NEOPIXEL_PIN                    PE15
@@ -352,7 +350,7 @@
     #if SD_CONNECTION_IS(ONBOARD)
       #define FORCE_SOFT_SPI
     #endif
-    //#define LCD_SCREEN_ROTATE              180  // 0, 90, 180, 270
+    //#define LCD_SCREEN_ROT_180
 
   #else                                           // !MKS_MINI_12864
 

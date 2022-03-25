@@ -125,7 +125,9 @@ xyze_pos_t destination; // {0}
     );
     // Transpose from [XYZ][HOTENDS] to [HOTENDS][XYZ]
     HOTEND_LOOP() LOOP_ABC(a) hotend_offset[e][a] = tmp[a][e];
-    TERN_(DUAL_X_CARRIAGE, hotend_offset[1].x = _MAX(X2_HOME_POS, X2_MAX_POS));
+    #if ENABLED(DUAL_X_CARRIAGE)
+      hotend_offset[1].x = _MAX(X2_HOME_POS, X2_MAX_POS);
+    #endif
   }
 #endif
 
@@ -215,7 +217,9 @@ void report_real_position() {
   xyze_pos_t npos = LOGICAL_AXIS_ARRAY(
     planner.get_axis_position_mm(E_AXIS),
     cartes.x, cartes.y, cartes.z,
-    cartes.i, cartes.j, cartes.k
+    planner.get_axis_position_mm(I_AXIS),
+    planner.get_axis_position_mm(J_AXIS),
+    planner.get_axis_position_mm(K_AXIS)
   );
 
   TERN_(HAS_POSITION_MODIFIERS, planner.unapply_modifiers(npos, true));
@@ -259,25 +263,27 @@ void report_current_position_projected() {
    * Output the current position (processed) to serial while moving
    */
   void report_current_position_moving() {
+
     get_cartesian_from_steppers();
     const xyz_pos_t lpos = cartes.asLogical();
-
-    SERIAL_ECHOPGM_P(
-      LIST_N(DOUBLE(LINEAR_AXES),
-           X_LBL, lpos.x,
-        SP_Y_LBL, lpos.y,
-        SP_Z_LBL, lpos.z,
-        SP_I_LBL, lpos.i,
-        SP_J_LBL, lpos.j,
-        SP_K_LBL, lpos.k
-      )
+    SERIAL_ECHOPGM(
+      "X:", lpos.x
+      #if HAS_Y_AXIS
+        , " Y:", lpos.y
+      #endif
+      #if HAS_Z_AXIS
+        , " Z:", lpos.z
+      #endif
       #if HAS_EXTRUDERS
-        , SP_E_LBL, current_position.e
+        , " E:", current_position.e
       #endif
     );
 
     stepper.report_positions();
-    TERN_(IS_SCARA, scara_report_positions());
+    #if IS_SCARA
+      scara_report_positions();
+    #endif
+
     report_current_grblstate_moving();
   }
 
@@ -465,8 +471,8 @@ void _internal_move_to_destination(const_feedRate_t fr_mm_s/*=0.0f*/
 }
 
 /**
- * Plan a move to (X, Y, Z, [I, [J, [K...]]]) and set the current_position
- * Plan a move to (X, Y, Z, [I, [J, [K...]]]) with separation of Z from other components.
+ * Plan a move to (X, Y, Z, [I, [J, [K]]]) and set the current_position
+ * Plan a move to (X, Y, Z) with separation of Z from other components.
  *
  * - If Z is moving up, the Z move is done before XY, etc.
  * - If Z is moving down, the Z move is done after XY, etc.
@@ -482,15 +488,6 @@ void do_blocking_move_to(LINEAR_AXIS_ARGS(const float), const_feedRate_t fr_mm_s
   #if HAS_Z_AXIS
     const feedRate_t z_feedrate = fr_mm_s ?: homing_feedrate(Z_AXIS);
   #endif
-  #if HAS_I_AXIS
-    const feedRate_t i_feedrate = fr_mm_s ?: homing_feedrate(I_AXIS);
-  #endif
-  #if HAS_J_AXIS
-    const feedRate_t j_feedrate = fr_mm_s ?: homing_feedrate(J_AXIS);
-  #endif
-  #if HAS_K_AXIS
-    const feedRate_t k_feedrate = fr_mm_s ?: homing_feedrate(K_AXIS);
-  #endif
 
   #if IS_KINEMATIC
     if (!position_is_reachable(x, y)) return;
@@ -505,8 +502,8 @@ void do_blocking_move_to(LINEAR_AXIS_ARGS(const float), const_feedRate_t fr_mm_s
 
     // when in the danger zone
     if (current_position.z > delta_clip_start_height) {
-      if (z > delta_clip_start_height) {                      // staying in the danger zone
-        destination.set(x, y, z);                             // move directly (uninterpolated)
+      if (z > delta_clip_start_height) {                     // staying in the danger zone
+        destination.set(x, y, z);                          // move directly (uninterpolated)
         prepare_internal_fast_move_to_destination();          // set current_position from destination
         if (DEBUGGING(LEVELING)) DEBUG_POS("danger zone move", current_position);
         return;
@@ -516,7 +513,7 @@ void do_blocking_move_to(LINEAR_AXIS_ARGS(const float), const_feedRate_t fr_mm_s
       if (DEBUGGING(LEVELING)) DEBUG_POS("zone border move", current_position);
     }
 
-    if (z > current_position.z) {                             // raising?
+    if (z > current_position.z) {                            // raising?
       destination.z = z;
       prepare_internal_fast_move_to_destination(z_feedrate);  // set current_position from destination
       if (DEBUGGING(LEVELING)) DEBUG_POS("z raise move", current_position);
@@ -526,7 +523,7 @@ void do_blocking_move_to(LINEAR_AXIS_ARGS(const float), const_feedRate_t fr_mm_s
     prepare_internal_move_to_destination();                   // set current_position from destination
     if (DEBUGGING(LEVELING)) DEBUG_POS("xy move", current_position);
 
-    if (z < current_position.z) {                             // lowering?
+    if (z < current_position.z) {                            // lowering?
       destination.z = z;
       prepare_internal_fast_move_to_destination(z_feedrate);  // set current_position from destination
       if (DEBUGGING(LEVELING)) DEBUG_POS("z lower move", current_position);
@@ -535,32 +532,39 @@ void do_blocking_move_to(LINEAR_AXIS_ARGS(const float), const_feedRate_t fr_mm_s
   #elif IS_SCARA
 
     // If Z needs to raise, do it before moving XY
-    if (destination.z < z) { destination.z = z; prepare_internal_fast_move_to_destination(z_feedrate); }
+    if (destination.z < z) {
+      destination.z = z;
+      prepare_internal_fast_move_to_destination(z_feedrate);
+    }
 
-    destination.set(x, y); prepare_internal_fast_move_to_destination(xy_feedrate);
+    destination.set(x, y);
+    prepare_internal_fast_move_to_destination(xy_feedrate);
 
     // If Z needs to lower, do it after moving XY
-    if (destination.z > z) { destination.z = z; prepare_internal_fast_move_to_destination(z_feedrate); }
+    if (destination.z > z) {
+      destination.z = z;
+      prepare_internal_fast_move_to_destination(z_feedrate);
+    }
 
   #else
 
-    #if HAS_Z_AXIS  // If Z needs to raise, do it before moving XY
-      if (current_position.z < z) { current_position.z = z; line_to_current_position(z_feedrate); }
+    #if HAS_Z_AXIS
+      // If Z needs to raise, do it before moving XY
+      if (current_position.z < z) {
+        current_position.z = z;
+        line_to_current_position(z_feedrate);
+      }
     #endif
 
-    current_position.set(x, y); line_to_current_position(xy_feedrate);
+    current_position.set(x, y);
+    line_to_current_position(xy_feedrate);
 
-    #if HAS_I_AXIS
-      current_position.i = i; line_to_current_position(i_feedrate);
-    #endif
-    #if HAS_J_AXIS
-      current_position.j = j; line_to_current_position(j_feedrate);
-    #endif
-    #if HAS_K_AXIS
-      current_position.k = k; line_to_current_position(k_feedrate);
-    #endif
-    #if HAS_Z_AXIS  // If Z needs to lower, do it after moving XY...
-      if (current_position.z > z) { current_position.z = z; line_to_current_position(z_feedrate); }
+    #if HAS_Z_AXIS
+      // If Z needs to lower, do it after moving XY
+      if (current_position.z > z) {
+        current_position.z = z;
+        line_to_current_position(z_feedrate);
+      }
     #endif
 
   #endif
@@ -599,7 +603,7 @@ void do_blocking_move_to_x(const_float_t rx, const_feedRate_t fr_mm_s/*=0.0*/) {
   }
 #endif
 
-#if HAS_I_AXIS
+#if LINEAR_AXES >= 4
   void do_blocking_move_to_i(const_float_t ri, const_feedRate_t fr_mm_s/*=0.0*/) {
     do_blocking_move_to_xyz_i(current_position, ri, fr_mm_s);
   }
@@ -611,7 +615,7 @@ void do_blocking_move_to_x(const_float_t rx, const_feedRate_t fr_mm_s/*=0.0*/) {
   }
 #endif
 
-#if HAS_J_AXIS
+#if LINEAR_AXES >= 5
   void do_blocking_move_to_j(const_float_t rj, const_feedRate_t fr_mm_s/*=0.0*/) {
     do_blocking_move_to_xyzi_j(current_position, rj, fr_mm_s);
   }
@@ -623,7 +627,7 @@ void do_blocking_move_to_x(const_float_t rx, const_feedRate_t fr_mm_s/*=0.0*/) {
   }
 #endif
 
-#if HAS_K_AXIS
+#if LINEAR_AXES >= 6
   void do_blocking_move_to_k(const_float_t rk, const_feedRate_t fr_mm_s/*=0.0*/) {
     do_blocking_move_to_xyzij_k(current_position, rk, fr_mm_s);
   }
@@ -741,7 +745,7 @@ void restore_feedrate_and_scaling() {
           delta_max_radius_2 = sq(delta_max_radius);
           break;
         case Z_AXIS:
-          refresh_delta_clip_start_height();
+          delta_clip_start_height = soft_endstop.max[axis] - delta_safe_distance_from_top();
         default: break;
       }
 
@@ -835,7 +839,7 @@ void restore_feedrate_and_scaling() {
         #endif
       }
     #endif
-    #if HAS_I_AXIS
+    #if LINEAR_AXES >= 4
       if (axis_was_homed(I_AXIS)) {
         #if !HAS_SOFTWARE_ENDSTOPS || ENABLED(MIN_SOFTWARE_ENDSTOP_I)
           NOLESS(target.i, soft_endstop.min.i);
@@ -845,7 +849,7 @@ void restore_feedrate_and_scaling() {
         #endif
       }
     #endif
-    #if HAS_J_AXIS
+    #if LINEAR_AXES >= 5
       if (axis_was_homed(J_AXIS)) {
         #if !HAS_SOFTWARE_ENDSTOPS || ENABLED(MIN_SOFTWARE_ENDSTOP_J)
           NOLESS(target.j, soft_endstop.min.j);
@@ -855,7 +859,7 @@ void restore_feedrate_and_scaling() {
         #endif
       }
     #endif
-    #if HAS_K_AXIS
+    #if LINEAR_AXES >= 6
       if (axis_was_homed(K_AXIS)) {
         #if !HAS_SOFTWARE_ENDSTOPS || ENABLED(MIN_SOFTWARE_ENDSTOP_K)
           NOLESS(target.k, soft_endstop.min.k);
@@ -1114,15 +1118,16 @@ FORCE_INLINE void segment_idle(millis_t &next_idle_ms) {
   bool idex_mirrored_mode                = false;                         // Used in mode 3
 
   float x_home_pos(const uint8_t extruder) {
-    if (extruder == 0) return X_HOME_POS;
-
-    /**
-     * In dual carriage mode the extruder offset provides an override of the
-     * second X-carriage position when homed - otherwise X2_HOME_POS is used.
-     * This allows soft recalibration of the second extruder home position
-     * (with M218 T1 Xn) without firmware reflash.
-     */
-    return hotend_offset[1].x > 0 ? hotend_offset[1].x : X2_HOME_POS;
+    if (extruder == 0)
+      return X_HOME_POS;
+    else
+      /**
+       * In dual carriage mode the extruder offset provides an override of the
+       * second X-carriage position when homed - otherwise X2_HOME_POS is used.
+       * This allows soft recalibration of the second extruder home position
+       * without firmware reflash (through the M218 command).
+       */
+      return hotend_offset[1].x > 0 ? hotend_offset[1].x : X2_HOME_POS;
   }
 
   void idex_set_mirrored_mode(const bool mirr) {
@@ -1318,9 +1323,9 @@ void prepare_line_to_destination() {
           TEST(axis_bits, X_AXIS) ? "X" : "",
           TEST(axis_bits, Y_AXIS) ? "Y" : "",
           TEST(axis_bits, Z_AXIS) ? "Z" : "",
-          TEST(axis_bits, I_AXIS) ? STR_I : "",
-          TEST(axis_bits, J_AXIS) ? STR_J : "",
-          TEST(axis_bits, K_AXIS) ? STR_K : ""
+          TEST(axis_bits, I_AXIS) ? AXIS4_STR : "",
+          TEST(axis_bits, J_AXIS) ? AXIS5_STR : "",
+          TEST(axis_bits, K_AXIS) ? AXIS6_STR : ""
         )
       );
       SERIAL_ECHO_START();
@@ -1359,8 +1364,10 @@ void prepare_line_to_destination() {
         #if X_SENSORLESS
           case X_AXIS:
             stealth_states.x = tmc_enable_stallguard(stepperX);
-            TERN_(X2_SENSORLESS, stealth_states.x2 = tmc_enable_stallguard(stepperX2));
-            #if ANY(CORE_IS_XY, MARKFORGED_XY, MARKFORGED_YX) && Y_SENSORLESS
+            #if AXIS_HAS_STALLGUARD(X2)
+              stealth_states.x2 = tmc_enable_stallguard(stepperX2);
+            #endif
+            #if EITHER(CORE_IS_XY, MARKFORGED_XY) && Y_SENSORLESS
               stealth_states.y = tmc_enable_stallguard(stepperY);
             #elif CORE_IS_XZ && Z_SENSORLESS
               stealth_states.z = tmc_enable_stallguard(stepperZ);
@@ -1370,8 +1377,10 @@ void prepare_line_to_destination() {
         #if Y_SENSORLESS
           case Y_AXIS:
             stealth_states.y = tmc_enable_stallguard(stepperY);
-            TERN_(Y2_SENSORLESS, stealth_states.y2 = tmc_enable_stallguard(stepperY2));
-            #if ANY(CORE_IS_XY, MARKFORGED_XY, MARKFORGED_YX) && X_SENSORLESS
+            #if AXIS_HAS_STALLGUARD(Y2)
+              stealth_states.y2 = tmc_enable_stallguard(stepperY2);
+            #endif
+            #if EITHER(CORE_IS_XY, MARKFORGED_XY) && X_SENSORLESS
               stealth_states.x = tmc_enable_stallguard(stepperX);
             #elif CORE_IS_YZ && Z_SENSORLESS
               stealth_states.z = tmc_enable_stallguard(stepperZ);
@@ -1381,24 +1390,21 @@ void prepare_line_to_destination() {
         #if Z_SENSORLESS
           case Z_AXIS:
             stealth_states.z = tmc_enable_stallguard(stepperZ);
-            TERN_(Z2_SENSORLESS, stealth_states.z2 = tmc_enable_stallguard(stepperZ2));
-            TERN_(Z3_SENSORLESS, stealth_states.z3 = tmc_enable_stallguard(stepperZ3));
-            TERN_(Z4_SENSORLESS, stealth_states.z4 = tmc_enable_stallguard(stepperZ4));
+            #if AXIS_HAS_STALLGUARD(Z2)
+              stealth_states.z2 = tmc_enable_stallguard(stepperZ2);
+            #endif
+            #if AXIS_HAS_STALLGUARD(Z3)
+              stealth_states.z3 = tmc_enable_stallguard(stepperZ3);
+            #endif
+            #if AXIS_HAS_STALLGUARD(Z4)
+              stealth_states.z4 = tmc_enable_stallguard(stepperZ4);
+            #endif
             #if CORE_IS_XZ && X_SENSORLESS
               stealth_states.x = tmc_enable_stallguard(stepperX);
             #elif CORE_IS_YZ && Y_SENSORLESS
               stealth_states.y = tmc_enable_stallguard(stepperY);
             #endif
             break;
-        #endif
-        #if I_SENSORLESS
-          case I_AXIS: stealth_states.i = tmc_enable_stallguard(stepperI); break;
-        #endif
-        #if J_SENSORLESS
-          case J_AXIS: stealth_states.j = tmc_enable_stallguard(stepperJ); break;
-        #endif
-        #if K_SENSORLESS
-          case K_AXIS: stealth_states.k = tmc_enable_stallguard(stepperK); break;
         #endif
       }
 
@@ -1411,13 +1417,13 @@ void prepare_line_to_destination() {
           #if HAS_Z_AXIS
             case Z_AXIS: if (ENABLED(Z_SPI_SENSORLESS)) endstops.tmc_spi_homing.z = true; break;
           #endif
-          #if HAS_I_AXIS
+          #if LINEAR_AXES >= 4
             case I_AXIS: if (ENABLED(I_SPI_SENSORLESS)) endstops.tmc_spi_homing.i = true; break;
           #endif
-          #if HAS_J_AXIS
+          #if LINEAR_AXES >= 5
             case J_AXIS: if (ENABLED(J_SPI_SENSORLESS)) endstops.tmc_spi_homing.j = true; break;
           #endif
-          #if HAS_K_AXIS
+          #if LINEAR_AXES >= 6
             case K_AXIS: if (ENABLED(K_SPI_SENSORLESS)) endstops.tmc_spi_homing.k = true; break;
           #endif
           default: break;
@@ -1435,8 +1441,10 @@ void prepare_line_to_destination() {
         #if X_SENSORLESS
           case X_AXIS:
             tmc_disable_stallguard(stepperX, enable_stealth.x);
-            TERN_(X2_SENSORLESS, tmc_disable_stallguard(stepperX2, enable_stealth.x2));
-            #if ANY(CORE_IS_XY, MARKFORGED_XY, MARKFORGED_YX) && Y_SENSORLESS
+            #if AXIS_HAS_STALLGUARD(X2)
+              tmc_disable_stallguard(stepperX2, enable_stealth.x2);
+            #endif
+            #if EITHER(CORE_IS_XY, MARKFORGED_XY) && Y_SENSORLESS
               tmc_disable_stallguard(stepperY, enable_stealth.y);
             #elif CORE_IS_XZ && Z_SENSORLESS
               tmc_disable_stallguard(stepperZ, enable_stealth.z);
@@ -1446,8 +1454,10 @@ void prepare_line_to_destination() {
         #if Y_SENSORLESS
           case Y_AXIS:
             tmc_disable_stallguard(stepperY, enable_stealth.y);
-            TERN_(Y2_SENSORLESS, tmc_disable_stallguard(stepperY2, enable_stealth.y2));
-            #if ANY(CORE_IS_XY, MARKFORGED_XY, MARKFORGED_YX) && X_SENSORLESS
+            #if AXIS_HAS_STALLGUARD(Y2)
+              tmc_disable_stallguard(stepperY2, enable_stealth.y2);
+            #endif
+            #if EITHER(CORE_IS_XY, MARKFORGED_XY) && X_SENSORLESS
               tmc_disable_stallguard(stepperX, enable_stealth.x);
             #elif CORE_IS_YZ && Z_SENSORLESS
               tmc_disable_stallguard(stepperZ, enable_stealth.z);
@@ -1457,24 +1467,21 @@ void prepare_line_to_destination() {
         #if Z_SENSORLESS
           case Z_AXIS:
             tmc_disable_stallguard(stepperZ, enable_stealth.z);
-            TERN_(Z2_SENSORLESS, tmc_disable_stallguard(stepperZ2, enable_stealth.z2));
-            TERN_(Z3_SENSORLESS, tmc_disable_stallguard(stepperZ3, enable_stealth.z3));
-            TERN_(Z4_SENSORLESS, tmc_disable_stallguard(stepperZ4, enable_stealth.z4));
+            #if AXIS_HAS_STALLGUARD(Z2)
+              tmc_disable_stallguard(stepperZ2, enable_stealth.z2);
+            #endif
+            #if AXIS_HAS_STALLGUARD(Z3)
+              tmc_disable_stallguard(stepperZ3, enable_stealth.z3);
+            #endif
+            #if AXIS_HAS_STALLGUARD(Z4)
+              tmc_disable_stallguard(stepperZ4, enable_stealth.z4);
+            #endif
             #if CORE_IS_XZ && X_SENSORLESS
               tmc_disable_stallguard(stepperX, enable_stealth.x);
             #elif CORE_IS_YZ && Y_SENSORLESS
               tmc_disable_stallguard(stepperY, enable_stealth.y);
             #endif
             break;
-        #endif
-        #if I_SENSORLESS
-          case I_AXIS: tmc_disable_stallguard(stepperI, enable_stealth.i); break;
-        #endif
-        #if J_SENSORLESS
-          case J_AXIS: tmc_disable_stallguard(stepperJ, enable_stealth.j); break;
-        #endif
-        #if K_SENSORLESS
-          case K_AXIS: tmc_disable_stallguard(stepperK, enable_stealth.k); break;
         #endif
       }
 
@@ -1487,13 +1494,13 @@ void prepare_line_to_destination() {
           #if HAS_Z_AXIS
             case Z_AXIS: if (ENABLED(Z_SPI_SENSORLESS)) endstops.tmc_spi_homing.z = false; break;
           #endif
-          #if HAS_I_AXIS
+          #if LINEAR_AXES >= 4
             case I_AXIS: if (ENABLED(I_SPI_SENSORLESS)) endstops.tmc_spi_homing.i = false; break;
           #endif
-          #if HAS_J_AXIS
+          #if LINEAR_AXES >= 5
             case J_AXIS: if (ENABLED(J_SPI_SENSORLESS)) endstops.tmc_spi_homing.j = false; break;
           #endif
-          #if HAS_K_AXIS
+          #if LINEAR_AXES >= 6
             case K_AXIS: if (ENABLED(K_SPI_SENSORLESS)) endstops.tmc_spi_homing.k = false; break;
           #endif
           default: break;
@@ -1796,8 +1803,8 @@ void prepare_line_to_destination() {
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Home Fast: ", move_length, "mm");
     do_homing_move(axis, move_length, 0.0, !use_probe_bump);
 
-    #if BOTH(HOMING_Z_WITH_PROBE, BLTOUCH)
-      if (axis == Z_AXIS && !bltouch.high_speed_mode) bltouch.stow(); // Intermediate STOW (in LOW SPEED MODE)
+    #if BOTH(HOMING_Z_WITH_PROBE, BLTOUCH_SLOW_MODE)
+      if (axis == Z_AXIS) bltouch.stow(); // Intermediate STOW (in LOW SPEED MODE)
     #endif
 
     // If a second homing move is configured...
@@ -1812,19 +1819,15 @@ void prepare_line_to_destination() {
         switch (axis) {
           default:
           case X_AXIS: es = X_ENDSTOP; break;
-          #if HAS_Y_AXIS
-            case Y_AXIS: es = Y_ENDSTOP; break;
-          #endif
-          #if HAS_Z_AXIS
-            case Z_AXIS: es = Z_ENDSTOP; break;
-          #endif
-          #if HAS_I_AXIS
+          case Y_AXIS: es = Y_ENDSTOP; break;
+          case Z_AXIS: es = Z_ENDSTOP; break;
+          #if LINEAR_AXES >= 4
             case I_AXIS: es = I_ENDSTOP; break;
           #endif
-          #if HAS_J_AXIS
+          #if LINEAR_AXES >= 5
             case J_AXIS: es = J_ENDSTOP; break;
           #endif
-          #if HAS_K_AXIS
+          #if LINEAR_AXES >= 6
             case K_AXIS: es = K_ENDSTOP; break;
           #endif
         }
@@ -1834,9 +1837,8 @@ void prepare_line_to_destination() {
         }
       #endif
 
-      #if BOTH(HOMING_Z_WITH_PROBE, BLTOUCH)
-        if (axis == Z_AXIS && !bltouch.high_speed_mode && bltouch.deploy())
-          return; // Intermediate DEPLOY (in LOW SPEED MODE)
+      #if BOTH(HOMING_Z_WITH_PROBE, BLTOUCH_SLOW_MODE)
+        if (axis == Z_AXIS && bltouch.deploy()) return; // Intermediate DEPLOY (in LOW SPEED MODE)
       #endif
 
       // Slow move towards endstop until triggered
@@ -2009,7 +2011,7 @@ void prepare_line_to_destination() {
         do_homing_move(axis, adjDistance, get_homing_bump_feedrate(axis));
       }
 
-    #else // CARTESIAN / CORE / MARKFORGED_XY / MARKFORGED_YX
+    #else // CARTESIAN / CORE / MARKFORGED_XY
 
       set_axis_is_at_home(axis);
       sync_plan_position();
@@ -2039,7 +2041,7 @@ void prepare_line_to_destination() {
         #if ENABLED(SENSORLESS_HOMING)
           planner.synchronize();
           if (false
-            #if ANY(IS_CORE, MARKFORGED_XY, MARKFORGED_YX)
+            #if EITHER(IS_CORE, MARKFORGED_XY)
               || axis != NORMAL_AXIS
             #endif
           ) safe_delay(200);  // Short delay to allow belts to spring back
