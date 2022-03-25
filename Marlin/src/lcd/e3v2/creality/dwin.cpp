@@ -91,6 +91,9 @@
 #ifndef MACHINE_SIZE
   #define MACHINE_SIZE STRINGIFY(X_BED_SIZE) "x" STRINGIFY(Y_BED_SIZE) "x" STRINGIFY(Z_MAX_POS)
 #endif
+#ifndef CORP_WEBSITE
+  #define CORP_WEBSITE WEBSITE_URL
+#endif
 
 #define PAUSE_HEAT
 
@@ -469,6 +472,15 @@ void Draw_Back_First(const bool is_sel=true) {
   else
     Item_AreaCopy(223, 179, 254, 189);
   if (is_sel) Draw_Menu_Cursor(0);
+}
+
+template <typename T>
+inline bool Apply_Encoder(const EncoderState &encoder_diffState, T &valref) {
+  if (encoder_diffState == ENCODER_DIFF_CW)
+    valref += EncoderRate.encoderMoveValue;
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
+    valref -= EncoderRate.encoderMoveValue;
+  return encoder_diffState == ENCODER_DIFF_ENTER;
 }
 
 //
@@ -1287,6 +1299,15 @@ void Goto_MainMenu() {
   TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)();
 }
 
+inline EncoderState get_encoder_state() {
+  static millis_t Encoder_ms = 0;
+  const millis_t ms = millis();
+  if (PENDING(ms, Encoder_ms)) return ENCODER_DIFF_NO;
+  const EncoderState state = Encoder_ReceiveAnalyze();
+  if (state != ENCODER_DIFF_NO) Encoder_ms = ms + ENCODER_WAIT_MS;
+  return state;
+}
+
 void HMI_Plan_Move(const feedRate_t fr_mm_s) {
   if (!planner.is_full()) {
     planner.synchronize();
@@ -1733,7 +1754,7 @@ void update_variable() {
     if (_new_hotend_target)
       Draw_Stat_Int(25 + 4 * STAT_CHR_W + 6, 384, _hotendtarget);
 
-    static int16_t _flow = 0;
+    static int16_t _flow = planner.flow_percentage[0];
     if (_flow != planner.flow_percentage[0]) {
       _flow = planner.flow_percentage[0];
       Draw_Stat_Int(116 + 2 * STAT_CHR_W, 417, _flow);
@@ -1747,7 +1768,7 @@ void update_variable() {
       Draw_Stat_Int(25 + 4 * STAT_CHR_W + 6, 417, _bedtarget);
   #endif
 
-  static int16_t _feedrate = 0;
+  static int16_t _feedrate = 100;
   if (_feedrate != feedrate_percentage) {
     _feedrate = feedrate_percentage;
     Draw_Stat_Int(116 + 2 * STAT_CHR_W, 384, _feedrate);
@@ -1812,9 +1833,6 @@ void make_name_without_ext(char *dst, char *src, size_t maxlen=MENU_CHAR_LIMIT) 
 }
 
 void HMI_SDCardInit() { card.cdroot(); }
-
-// Initialize or re-initialize the LCD
-void MarlinUI::init_lcd() { DWIN_Startup(); }
 
 void MarlinUI::refresh() { /* Nothing to see here */ }
 
@@ -2251,8 +2269,6 @@ void HMI_SelectFile() {
         //  thermalManager.fan_speed[i] = 255;
       #endif
 
-      _card_percent = 0;
-      _remain_time = 0;
       Goto_PrintProcess();
     }
   }
@@ -2744,10 +2760,7 @@ void HMI_Prepare() {
       #endif
 
       #if HAS_HOTEND || HAS_HEATED_BED
-        case PREPARE_CASE_COOL:
-          thermalManager.cooldown();
-          ui.reset_status();
-          break;
+        case PREPARE_CASE_COOL: thermalManager.cooldown(); break;
       #endif
 
       case PREPARE_CASE_LANG:
@@ -4068,13 +4081,6 @@ void HMI_Init() {
   HMI_SetLanguage();
 }
 
-void DWIN_InitScreen() {
-  Encoder_Configuration();
-  HMI_Init();
-  HMI_SetLanguageCache();
-  HMI_StartFrame(true);
-}
-
 void DWIN_Update() {
   EachMomentUpdate();   // Status update
   HMI_SDCardUpdate();   // SD card update
@@ -4167,7 +4173,10 @@ void EachMomentUpdate() {
   }
   #if ENABLED(POWER_LOSS_RECOVERY)
     else if (DWIN_lcd_sd_status && recovery.dwin_flag) { // resume print before power off
+      static bool recovery_flag = false;
+
       recovery.dwin_flag = false;
+      recovery_flag = true;
 
       auto update_selection = [&](const bool sel) {
         HMI_flag.select_flag = sel;
@@ -4187,7 +4196,6 @@ void EachMomentUpdate() {
       DWIN_Draw_String(true, font8x16, Popup_Text_Color, Color_Bg_Window, npos, 252, name);
       DWIN_UpdateLCD();
 
-      bool recovery_flag = true;
       while (recovery_flag) {
         EncoderState encoder_diffState = Encoder_ReceiveAnalyze();
         if (encoder_diffState != ENCODER_DIFF_NO) {
@@ -4281,7 +4289,7 @@ void DWIN_HandleScreen() {
   }
 }
 
-void DWIN_HomingDone() {
+void DWIN_CompletedHoming() {
   HMI_flag.home_flag = false;
   dwin_zoffset = TERN0(HAS_BED_PROBE, probe.offset.z);
   if (checkkey == Last_Prepare) {
@@ -4297,7 +4305,7 @@ void DWIN_HomingDone() {
   }
 }
 
-void DWIN_LevelingDone() {
+void DWIN_CompletedLeveling() {
   if (checkkey == Leveling) Goto_MainMenu();
 }
 
