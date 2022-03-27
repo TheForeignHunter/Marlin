@@ -2443,16 +2443,37 @@ void LevBed(uint8_t point) {
   }
 
   #if HAS_ONESTEP_LEVELING
-    planner.synchronize();
-    gcode.process_subcommands_now(F("M420S0\nG28O"));
-    planner.synchronize();
-    zval = probe.probe_at_point(xpos, ypos, PROBE_PT_STOW);
-    sprintf_P(cmd, PSTR(fmt),
-      dtostrf(xpos, 1, 1, str_1),
-      dtostrf(ypos, 1, 1, str_2),
-      dtostrf(zval, 1, 2, str_3)
-    );
-    ui.set_status(cmd);
+
+    if (HMI_data.FullManualTramming) {
+      planner.synchronize();
+      sprintf_P(cmd, PSTR("M420S0\nG28O\nG90\nG0Z5F300\nG0X%sY%sF5000\nG0Z0F300"),
+        dtostrf(xpos, 1, 1, str_1),
+        dtostrf(ypos, 1, 1, str_2)
+      );
+      queue.inject(cmd);
+    }
+    else {
+      LIMIT(xpos, X_MIN_POS, (X_MAX_POS + probe.offset.x));
+      LIMIT(ypos, Y_MIN_POS, (Y_MAX_POS + probe.offset.y));
+      probe.stow();
+      gcode.process_subcommands_now(F("M420S0\nG28O"));
+      planner.synchronize();
+      inLev = true;
+      zval = probe.probe_at_point(xpos, ypos, PROBE_PT_STOW);
+      if (isnan(zval))
+        LCD_MESSAGE_F("Position Not Reachable, check offsets");
+      else {
+        sprintf_P(cmd, PSTR("X:%s, Y:%s, Z:%s"),
+          dtostrf(xpos, 1, 1, str_1),
+          dtostrf(ypos, 1, 1, str_2),
+          dtostrf(zval, 1, 2, str_3)
+        );
+        ui.set_status(cmd);
+      }
+      inLev = false;
+    }
+    return zval;
+
   #else
     planner.synchronize();
     sprintf_P(cmd, PSTR(fmt), xpos, ypos);
@@ -2460,11 +2481,72 @@ void LevBed(uint8_t point) {
   #endif
 }
 
-void LevBedFL() { LevBed(0); }
-void LevBedFR() { LevBed(1); }
-void LevBedBR() { LevBed(2); }
-void LevBedBL() { LevBed(3); }
-void LevBedC () { LevBed(4); }
+void TramFL() { Tram(0); }
+void TramFR() { Tram(1); }
+void TramBR() { Tram(2); }
+void TramBL() { Tram(3); }
+void TramC () { Tram(4); }
+
+#if HAS_ONESTEP_LEVELING
+
+  void Trammingwizard() {
+    bed_mesh_t zval = {0};
+    if (HMI_data.FullManualTramming) {
+      LCD_MESSAGE_F("Disable manual tramming");
+      return;
+    }
+    zval[0][0] = Tram(0);
+    checkkey = NothingToDo;
+    MeshViewer.DrawMesh(zval, 2, 2);
+    zval[1][0] = Tram(1);
+    MeshViewer.DrawMesh(zval, 2, 2);
+    zval[1][1] = Tram(2);
+    MeshViewer.DrawMesh(zval, 2, 2);
+    zval[0][1] = Tram(3);
+    MeshViewer.DrawMesh(zval, 2, 2);
+    char str_1[6] = "", str_2[6] = "";
+    ui.status_printf(0, F("Limits minZ: %s, maxZ: %s"),
+      dtostrf(MeshViewer.min, 1, 2, str_1),
+      dtostrf(MeshViewer.max, 1, 2, str_2)
+    );
+    if (ABS(MeshViewer.max - MeshViewer.min) < 0.05) {
+      DWINUI::Draw_CenteredString(140,F("Corners leveled"));
+      DWINUI::Draw_CenteredString(160,F("Tolerance achieved!"));
+    }
+    else {
+      uint8_t p = 0;
+      float d, max = 0;
+      FSTR_P plabel;
+      LOOP_L_N(x,2) LOOP_L_N(y,2) {
+        d = ABS(zval[x][y] - MeshViewer.avg);
+        if (max < d) {
+          max = d;
+          p = x + 2 * y;
+        }
+      }
+      switch (p) {
+        case 0b00 : plabel = GET_TEXT_F(MSG_LEVBED_FL); break;
+        case 0b01 : plabel = GET_TEXT_F(MSG_LEVBED_FR); break;
+        case 0b10 : plabel = GET_TEXT_F(MSG_LEVBED_BL); break;
+        case 0b11 : plabel = GET_TEXT_F(MSG_LEVBED_BR); break;
+        default   : plabel = F(""); break;
+      }
+      DWINUI::Draw_CenteredString(130, F("Corners not leveled"));
+      DWINUI::Draw_CenteredString(150, F("Knob adjustment required"));
+      DWINUI::Draw_CenteredString(Color_Green, 170, plabel);
+    }
+    DWINUI::Draw_Button(BTN_Continue, 86, 305);
+    checkkey = Menu;
+    HMI_SaveProcessID(WaitResponse);
+  }
+
+  void SetManualTramming() {
+    HMI_data.FullManualTramming = !HMI_data.FullManualTramming;
+    Draw_Chkb_Line(CurrentMenu->line(), HMI_data.FullManualTramming);
+    DWIN_UpdateLCD();
+  }
+
+#endif // HAS_ONESTEP_LEVELING
 
 #if ENABLED(MESH_BED_LEVELING)
 
