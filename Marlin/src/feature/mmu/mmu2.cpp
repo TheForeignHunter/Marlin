@@ -530,7 +530,7 @@ static void mmu2_not_responding() {
             while (!thermalManager.wait_for_hotend(active_extruder, false)) safe_delay(100);
             load_filament_to_nozzle(index);
           #else
-            BUZZ(400, 40);
+            ERR_BUZZ();
           #endif
         } break;
 
@@ -549,7 +549,7 @@ static void mmu2_not_responding() {
               active_extruder = 0;
             }
           #else
-            BUZZ(400, 40);
+            ERR_BUZZ();
           #endif
         } break;
 
@@ -618,7 +618,7 @@ static void mmu2_not_responding() {
           while (!thermalManager.wait_for_hotend(active_extruder, false)) safe_delay(100);
           load_filament_to_nozzle(index);
         #else
-          BUZZ(400, 40);
+          ERR_BUZZ();
         #endif
       } break;
 
@@ -638,7 +638,7 @@ static void mmu2_not_responding() {
           extruder = index;
           active_extruder = 0;
         #else
-          BUZZ(400, 40);
+          ERR_BUZZ();
         #endif
       } break;
 
@@ -712,7 +712,7 @@ static void mmu2_not_responding() {
           while (!thermalManager.wait_for_hotend(active_extruder, false)) safe_delay(100);
           load_filament_to_nozzle(index);
         #else
-          BUZZ(400, 40);
+          ERR_BUZZ();
         #endif
       } break;
 
@@ -731,7 +731,7 @@ static void mmu2_not_responding() {
           extruder = index;
           active_extruder = 0;
         #else
-          BUZZ(400, 40);
+          ERR_BUZZ();
         #endif
       } break;
 
@@ -816,7 +816,7 @@ void MMU2::manage_response(const bool move_axes, const bool turn_off_nozzle) {
       if (turn_off_nozzle && resume_hotend_temp) {
         thermalManager.setTargetHotend(resume_hotend_temp, active_extruder);
         LCD_MESSAGE(MSG_HEATING);
-        BUZZ(200, 40);
+        ERR_BUZZ();
 
         while (!thermalManager.wait_for_hotend(active_extruder, false)) safe_delay(1000);
       }
@@ -828,19 +828,14 @@ void MMU2::manage_response(const bool move_axes, const bool turn_off_nozzle) {
       #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 
       if (move_axes && all_axes_homed()) {
-        LCD_MESSAGE(MSG_MMU2_RESUMING);
-        BUZZ(198, 404); BUZZ(4, 0); BUZZ(198, 404);
-
         // Move XY to starting position, then Z
         do_blocking_move_to_xy(resume_position, feedRate_t(NOZZLE_PARK_XY_FEEDRATE));
 
         // Move Z_AXIS to saved position
         do_blocking_move_to_z(resume_position.z, feedRate_t(NOZZLE_PARK_Z_FEEDRATE));
       }
-      else {
-        BUZZ(198, 404); BUZZ(4, 0); BUZZ(198, 404);
-        LCD_MESSAGE(MSG_MMU2_RESUMING);
-      }
+
+      #pragma GCC diagnostic pop
     }
   }
 }
