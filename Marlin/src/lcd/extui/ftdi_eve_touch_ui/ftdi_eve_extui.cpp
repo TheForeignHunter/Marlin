@@ -98,7 +98,7 @@ namespace ExtUI {
   void onLoadSettings(const char *buff) { InterfaceSettingsScreen::loadSettings(buff); }
   void onPostprocessSettings() {} // Called after loading or resetting stored settings
 
-  void onConfigurationStoreWritten(bool success) {
+  void onSettingsStored(bool success) {
     #ifdef ARCHIM2_SPI_FLASH_EEPROM_BACKUP_SIZE
       if (success && InterfaceSettingsScreen::backupEEPROM()) {
         SERIAL_ECHOLNPGM("EEPROM backed up to SPI Flash");
@@ -107,7 +107,7 @@ namespace ExtUI {
       UNUSED(success);
     #endif
   }
-  void onConfigurationStoreRead(bool) {}
+  void onSettingsLoaded(bool) {}
 
   void onPlayTone(const uint16_t frequency, const uint16_t duration) { sound.play_tone(frequency, duration); }
 
