@@ -99,7 +99,6 @@ namespace Language_uk {
     LSTR MSG_HOME_OFFSET_K                  = _UxGT("Зміщ. дому ") STR_K;
   #endif
   LSTR MSG_HOME_OFFSETS_APPLIED             = _UxGT("Зміщення прийняті");
-  LSTR MSG_SET_ORIGIN                       = _UxGT("Встановити нуль");
   LSTR MSG_SELECT_ORIGIN                    = _UxGT("Оберіть нуль");
   #if LCD_WIDTH > 21 || HAS_DWIN_E3V2
     LSTR MSG_LAST_VALUE_SP                  = _UxGT("Останнє значення ");
@@ -396,8 +395,8 @@ namespace Language_uk {
   LSTR MSG_PID_AUTOTUNE                     = _UxGT("Автопідбір PID");
   LSTR MSG_PID_AUTOTUNE_E                   = _UxGT("Автопідбір PID *");
   LSTR MSG_PID_AUTOTUNE_DONE                = _UxGT("Підбір PID виконано");
-  LSTR MSG_PID_BAD_EXTRUDER_NUM             = _UxGT("Збій автопідбору. Поганий екструдер.");
-  LSTR MSG_PID_TEMP_TOO_HIGH                = _UxGT("Збій автопідбору. Температура завищена.");
+  LSTR MSG_PID_BAD_EXTRUDER_NUM             = _UxGT("Збій автопідбору! Поганий екструдер.");
+  LSTR MSG_PID_TEMP_TOO_HIGH                = _UxGT("Збій автопідбору! Температура завищена.");
   LSTR MSG_PID_TIMEOUT                      = _UxGT("Збій автопідбору! Вичерпан час.");
 
   LSTR MSG_SELECT                           = _UxGT("Вибрати");
@@ -472,7 +471,7 @@ namespace Language_uk {
     LSTR MSG_CONTRAST                       = _UxGT("Контраст");
     LSTR MSG_BRIGHTNESS                     = _UxGT("Яскравість");
   #endif
-  LSTR MSG_LCD_BKL_TIMEOUT                  = _UxGT("LCD Таймаут, с");
+  LSTR MSG_LCD_TIMEOUT_SEC                  = _UxGT("LCD Таймаут, с");
   LSTR MSG_BRIGHTNESS_OFF                   = _UxGT("Підсвітка вимк.");
   LSTR MSG_STORE_EEPROM                     = _UxGT("Зберегти в EEPROM");
   LSTR MSG_LOAD_EEPROM                      = _UxGT("Зчитати з EEPROM");
