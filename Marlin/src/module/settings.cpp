@@ -76,6 +76,7 @@
   #include "../lcd/extui/ui_api.h"
 #elif ENABLED(DWIN_LCD_PROUI)
   #include "../lcd/e3v2/proui/dwin.h"
+  #include "../lcd/e3v2/proui/bedlevel_tools.h"
 #elif ENABLED(DWIN_CREALITY_LCD_JYERSUI)
   #include "../lcd/e3v2/jyersui/dwin.h"
 #endif
@@ -180,9 +181,9 @@
 #define _EN_ITEM(N) , E##N
 #define _EN1_ITEM(N) , E##N:1
 
-typedef struct { uint16_t NUM_AXIS_LIST(X, Y, Z, I, J, K, U, V, W), X2, Y2, Z2, Z3, Z4 REPEAT(E_STEPPERS, _EN_ITEM); } per_stepper_uint16_t;
-typedef struct { uint32_t NUM_AXIS_LIST(X, Y, Z, I, J, K, U, V, W), X2, Y2, Z2, Z3, Z4 REPEAT(E_STEPPERS, _EN_ITEM); } per_stepper_uint32_t;
-typedef struct {  int16_t NUM_AXIS_LIST(X, Y, Z, I, J, K, U, V, W), X2, Y2, Z2, Z3, Z4;                              } mot_stepper_int16_t;
+typedef struct { uint16_t MAIN_AXIS_NAMES, X2, Y2, Z2, Z3, Z4 REPEAT(E_STEPPERS, _EN_ITEM); } per_stepper_uint16_t;
+typedef struct { uint32_t MAIN_AXIS_NAMES, X2, Y2, Z2, Z3, Z4 REPEAT(E_STEPPERS, _EN_ITEM); } per_stepper_uint32_t;
+typedef struct {  int16_t MAIN_AXIS_NAMES, X2, Y2, Z2, Z3, Z4;                              } mot_stepper_int16_t;
 typedef struct {     bool NUM_AXIS_LIST(X:1, Y:1, Z:1, I:1, J:1, K:1, U:1, V:1, W:1), X2:1, Y2:1, Z2:1, Z3:1, Z4:1 REPEAT(E_STEPPERS, _EN1_ITEM); } per_stepper_bool_t;
 
 #undef _EN_ITEM
@@ -401,8 +402,8 @@ typedef struct SettingsDataStruct {
   //
   // Display Sleep
   //
-  #if LCD_BACKLIGHT_TIMEOUT
-    uint16_t lcd_backlight_timeout;                     // M255 S
+  #if LCD_BACKLIGHT_TIMEOUT_MINS
+    uint8_t backlight_timeout_minutes;                  // M255 S
   #elif HAS_DISPLAY_SLEEP
     uint8_t sleep_timeout_minutes;                      // M255 S
   #endif
@@ -592,7 +593,7 @@ void MarlinSettings::postprocess() {
   xyze_pos_t oldpos = current_position;
 
   // steps per s2 needs to be updated to agree with units per s2
-  planner.reset_acceleration_rates();
+  planner.refresh_acceleration_rates();
 
   // Make sure delta kinematics are updated before refreshing the
   // planner position so the stepper counts will be set correctly.
@@ -639,7 +640,7 @@ void MarlinSettings::postprocess() {
   TERN_(HAS_LCD_CONTRAST, ui.refresh_contrast());
   TERN_(HAS_LCD_BRIGHTNESS, ui.refresh_brightness());
 
-  #if LCD_BACKLIGHT_TIMEOUT
+  #if LCD_BACKLIGHT_TIMEOUT_MINS
     ui.refresh_backlight_timeout();
   #elif HAS_DISPLAY_SLEEP
     ui.refresh_screen_timeout();
@@ -1156,8 +1157,8 @@ void MarlinSettings::postprocess() {
     //
     // LCD Backlight / Sleep Timeout
     //
-    #if LCD_BACKLIGHT_TIMEOUT
-      EEPROM_WRITE(ui.lcd_backlight_timeout);
+    #if LCD_BACKLIGHT_TIMEOUT_MINS
+      EEPROM_WRITE(ui.backlight_timeout_minutes);
     #elif HAS_DISPLAY_SLEEP
       EEPROM_WRITE(ui.sleep_timeout_minutes);
     #endif
@@ -2107,8 +2108,8 @@ void MarlinSettings::postprocess() {
       //
       // LCD Backlight / Sleep Timeout
       //
-      #if LCD_BACKLIGHT_TIMEOUT
-        EEPROM_READ(ui.lcd_backlight_timeout);
+      #if LCD_BACKLIGHT_TIMEOUT_MINS
+        EEPROM_READ(ui.backlight_timeout_minutes);
       #elif HAS_DISPLAY_SLEEP
         EEPROM_READ(ui.sleep_timeout_minutes);
       #endif
@@ -2776,7 +2777,7 @@ void MarlinSettings::postprocess() {
         #endif
 
         persistentStore.access_start();
-        const uint16_t status = persistentStore.read_data(pos, dest, MESH_STORE_SIZE, &crc);
+        uint16_t status = persistentStore.read_data(pos, dest, MESH_STORE_SIZE, &crc);
         persistentStore.access_finish();
 
         #if ENABLED(OPTIMIZED_MESH_STORAGE)
@@ -2787,6 +2788,16 @@ void MarlinSettings::postprocess() {
           }
           else
             bedlevel.set_mesh_from_store(z_mesh_store, bedlevel.z_values);
+        #endif
+
+        #if ENABLED(DWIN_LCD_PROUI)
+          status = !BedLevelTools.meshvalidate();
+          if (status) {
+            bedlevel.invalidate();
+            LCD_MESSAGE(MSG_UBL_MESH_INVALID);
+          }
+          else
+            ui.status_printf(0, GET_TEXT_F(MSG_MESH_LOADED), bedlevel.storage_slot);
         #endif
 
         if (status) SERIAL_ECHOLNPGM("?Unable to load mesh data.");
@@ -3187,8 +3198,8 @@ void MarlinSettings::reset() {
   //
   // LCD Backlight / Sleep Timeout
   //
-  #if LCD_BACKLIGHT_TIMEOUT
-    ui.lcd_backlight_timeout = LCD_BACKLIGHT_TIMEOUT;
+  #if LCD_BACKLIGHT_TIMEOUT_MINS
+    ui.backlight_timeout_minutes = LCD_BACKLIGHT_TIMEOUT_MINS;
   #elif HAS_DISPLAY_SLEEP
     ui.sleep_timeout_minutes = DISPLAY_SLEEP_MINUTES;
   #endif
@@ -3319,6 +3330,7 @@ void MarlinSettings::reset() {
     #if ENABLED(MPC_INCLUDE_FAN)
       constexpr float _mpc_ambient_xfer_coeff_fan255[] = MPC_AMBIENT_XFER_COEFF_FAN255;
     #endif
+    constexpr float _filament_heat_capacity_permm[] = FILAMENT_HEAT_CAPACITY_PERMM;
 
     static_assert(COUNT(_mpc_heater_power) == HOTENDS, "MPC_HEATER_POWER must have HOTENDS items.");
     static_assert(COUNT(_mpc_block_heat_capacity) == HOTENDS, "MPC_BLOCK_HEAT_CAPACITY must have HOTENDS items.");
@@ -3327,6 +3339,7 @@ void MarlinSettings::reset() {
     #if ENABLED(MPC_INCLUDE_FAN)
       static_assert(COUNT(_mpc_ambient_xfer_coeff_fan255) == HOTENDS, "MPC_AMBIENT_XFER_COEFF_FAN255 must have HOTENDS items.");
     #endif
+    static_assert(COUNT(_filament_heat_capacity_permm) == HOTENDS, "FILAMENT_HEAT_CAPACITY_PERMM must have HOTENDS items.");
 
     HOTEND_LOOP() {
       thermalManager.temp_hotend[e].constants.heater_power = _mpc_heater_power[e];
@@ -3336,6 +3349,7 @@ void MarlinSettings::reset() {
       #if ENABLED(MPC_INCLUDE_FAN)
         thermalManager.temp_hotend[e].constants.fan255_adjustment = _mpc_ambient_xfer_coeff_fan255[e] - _mpc_ambient_xfer_coeff[e];
       #endif
+      thermalManager.temp_hotend[e].constants.filament_heat_capacity_permm = _filament_heat_capacity_permm[e];
     }
   #endif
 
