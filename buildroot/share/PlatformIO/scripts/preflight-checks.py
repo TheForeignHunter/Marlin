@@ -5,7 +5,7 @@
 import pioutil
 if pioutil.is_pio_build():
 
-    import re,sys
+    import os,re,sys
     from pathlib import Path
     Import("env")
 
