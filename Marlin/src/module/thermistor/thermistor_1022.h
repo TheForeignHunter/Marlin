@@ -1,6 +1,6 @@
 /**
  * Marlin 3D Printer Firmware
- * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ * Copyright (c) 2022 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
  * Based on Sprinter and grbl.
  * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
@@ -21,14 +21,25 @@
  */
 #pragma once
 
-#if USE_FALLBACK_EEPROM
-  #define FLASH_EEPROM_EMULATION
-#elif EITHER(I2C_EEPROM, SPI_EEPROM)
-  #define USE_SHARED_EEPROM 1
-#endif
+#define REVERSE_TEMP_SENSOR_RANGE_1022 1
 
-// LPC1768 boards seem to lose steps when saving to EEPROM during print (issue #20785)
-// TODO: Which other boards are incompatible?
-#if defined(MCU_LPC1768) && ENABLED(FLASH_EEPROM_EMULATION) && PRINTCOUNTER_SAVE_INTERVAL > 0
-  #define PRINTCOUNTER_SYNC 1
-#endif
+// Pt1000 with 1k0 pullup
+constexpr temp_entry_t temptable_1022[] PROGMEM = {
+  PtLine(  0, 1000, 2200),
+  PtLine( 25, 1000, 2200),
+  PtLine( 50, 1000, 2200),
+  PtLine( 75, 1000, 2200),
+  PtLine(100, 1000, 2200),
+  PtLine(125, 1000, 2200),
+  PtLine(150, 1000, 2200),
+  PtLine(175, 1000, 2200),
+  PtLine(200, 1000, 2200),
+  PtLine(225, 1000, 2200),
+  PtLine(250, 1000, 2200),
+  PtLine(275, 1000, 2200),
+  PtLine(300, 1000, 2200),
+  PtLine(350, 1000, 2200),
+  PtLine(400, 1000, 2200),
+  PtLine(450, 1000, 2200),
+  PtLine(500, 1000, 2200)
+};
