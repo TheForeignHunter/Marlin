@@ -100,7 +100,7 @@
  */
 #define SERIAL_PORT 2
 
-#define SERIAL_PORT_2 0
+#define SERIAL_PORT_2 -1
 /**
  * Serial Port Baud Rate
  * This is the default communication speed for all serial ports.
